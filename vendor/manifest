@@ -1,0 +1,24 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "bazil.org/fuse",
+			"repository": "https://github.com/bazil/fuse",
+			"revision": "4a4e0029e1364436782cd3cd5073a1e9bb10176f",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/jessevdk/go-flags",
+			"repository": "https://github.com/jessevdk/go-flags",
+			"revision": "6b9493b3cb60367edd942144879646604089e3f7",
+			"branch": "master"
+		},
+		{
+			"importpath": "golang.org/x/net/context",
+			"repository": "https://go.googlesource.com/net",
+			"revision": "6acef71eb69611914f7a30939ea9f6e194c78172",
+			"branch": "master",
+			"path": "/context"
+		}
+	]
+}

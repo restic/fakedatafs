@@ -1,0 +1,40 @@
+language: go
+sudo: false
+
+go:
+  - 1.6
+
+os:
+  - linux
+
+notifications:
+  irc:
+    channels:
+      - "chat.freenode.net#restic"
+    on_success: change
+    on_failure: change
+    skip_join: true
+
+install:
+  - go version
+  - export GOBIN="$GOPATH/bin"
+  - export PATH="$PATH:$GOBIN"
+  - go env
+
+script:
+  - go run run_integration_tests.go
+
+install:
+  - go version
+  - export GOBIN="$GOPATH/bin"
+  - export PATH="$PATH:$GOBIN"
+  - go get github.com/constabulary/gb/...
+  - gb info
+  - gb vendor restore
+
+script:
+  - gb build
+  - gb test
+  - go run build.go
+  - diff <(goimports -d ./src) <(printf "")
+  - diff <(golint ./src/...) <(printf "")
