@@ -21,9 +21,12 @@ var (
 
 // Options are global settings.
 type Options struct {
-	Seed    int  `long:"seed"                  description:"initial random seed"`
 	Version bool `long:"version" short:"V"     description:"print version number"`
 	Verbose bool `long:"verbose" short:"v"     description:"be verbose"`
+
+	Seed     int64 `long:"seed"                    default:"23" description:"initial random seed"`
+	NumFiles int   `long:"files-per-dir" short:"n" default:"100" description:"number of files per directory"`
+	MaxSize  int   `long:"maxsize"       short:"m" default:"100" description:"max individual file size, in KiB"`
 
 	mountpoint string
 }
@@ -65,6 +68,12 @@ func M(format string, data ...interface{}) {
 }
 
 func mount(opts Options) error {
+	fakefs := FakeDataFS{
+		Seed:        opts.Seed,
+		FilesPerDir: opts.NumFiles,
+		MaxSize:     opts.MaxSize * 1024,
+	}
+
 	conn, err := fuse.Mount(
 		opts.mountpoint,
 		fuse.ReadOnly(),
@@ -75,25 +84,12 @@ func mount(opts Options) error {
 	}
 	defer conn.Close()
 
-	root := fs.Tree{}
-
-	// root.Add("snapshots", fuse.NewSnapshotsDir(repo, cmd.Root))
-
-	// cmd.global.Printf("Now serving %s at %s\n", repo.Backend().Location(), mountpoint)
-	// cmd.global.Printf("Don't forget to umount after quitting!\n")
-
-	// AddCleanupHandler(func() error {
-	// 	return fuse.Unmount(mountpoint)
-	// })
-
-	// cmd.ready <- struct{}{}
-
 	M("filesystem mounted at %v\n", opts.mountpoint)
 
 	serveErrCh := make(chan error, 2)
 	go func() {
 		V("serving\n")
-		err := fs.Serve(conn, &root)
+		err := fs.Serve(conn, fakefs)
 		if err != nil {
 			serveErrCh <- err
 		}
