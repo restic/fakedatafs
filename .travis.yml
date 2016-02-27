@@ -37,5 +37,5 @@ script:
   - gb build
   - gb test
   - go run build.go
-  - diff <(goimports -d ./src) <(printf "")
+  - diff <(GOPATH="$PWD:$PWD/vendor" goimports -d ./src) <(printf "")
   - diff <(golint ./src/...) <(printf "")
