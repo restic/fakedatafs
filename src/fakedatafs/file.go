@@ -11,10 +11,7 @@ import (
 
 // File represents fake data with a specific seed.
 type File struct {
-	seed int64
-	rand *rand.Rand
-	pos  int
-
+	Seed int64
 	Size  int
 	Inode uint64
 }
@@ -22,32 +19,16 @@ type File struct {
 // NewFile initializes a new file with the given seed.
 func NewFile(seed int64, size int, inode uint64) *File {
 	return &File{
-		seed:  seed,
-		rand:  rand.New(rand.NewSource(seed)),
+		Seed:  seed,
 		Size:  size,
 		Inode: inode,
 	}
 }
 
-func (f *File) Read(p []byte) (int, error) {
-	if f.pos >= f.Size {
-		return 0, io.EOF
-	}
-
-	if f.pos+len(p) > f.Size {
-		maxlen := f.Size - f.pos
-		p = p[:maxlen]
-	}
-
-	n, err := io.ReadFull(f.rand, p)
-	f.pos += n
-	return n, err
-}
-
 // ReadAll returns the content of the file.
 func (f File) ReadAll() ([]byte, error) {
 	buf := make([]byte, f.Size)
-	src := rand.New(rand.NewSource(f.seed))
+	src := rand.New(rand.NewSource(f.Seed))
 	_, err := io.ReadFull(src, buf)
 	return buf, err
 }
