@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/restic/fakedatafs.svg?branch=master)](https://travis-ci.org/restic/fakedatafs)
+[![Report Card](http://goreportcard.com/badge/restic/fakedatafs)](http://goreportcard.com/report/restic/fakedatafs)
+
 fakedatafs is a file system that generates fake data on demand in a
 deterministic way. It is implemented as a FUSE module and can be used to test
 backup software.
