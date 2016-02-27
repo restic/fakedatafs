@@ -22,7 +22,7 @@ type Options struct {
 var opts = Options{}
 var parser = flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
 
-var done = make(chan struct{})
+var exitRequested = make(chan struct{})
 
 func init() {
 	parser.Usage = "mountpoint"
@@ -35,7 +35,7 @@ func init() {
 func cleanupHandler(c <-chan os.Signal) {
 	for range c {
 		fmt.Println("Interrupt received, cleaning up")
-		close(done)
+		close(exitRequested)
 	}
 }
 
@@ -74,7 +74,11 @@ func mount(opts Options) error {
 		return fuse.Unmount(opts.mountpoint)
 	}
 
-	<-done
+	fmt.Printf("successfully mounted fakedatafs at %v\n", opts.mountpoint)
+
+	<-exitRequested
+
+	fmt.Printf("umounting...\n")
 	return fuse.Unmount(opts.mountpoint)
 }
 
