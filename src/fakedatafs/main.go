@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 
 	"bazil.org/fuse"
@@ -40,9 +41,13 @@ func init() {
 }
 
 func cleanupHandler(c <-chan os.Signal) {
+	once := &sync.Once{}
+
 	for range c {
-		fmt.Println("Interrupt received, cleaning up")
-		close(exitRequested)
+		once.Do(func() {
+			fmt.Println("Interrupt received, cleaning up")
+			close(exitRequested)
+		})
 	}
 }
 
