@@ -7,14 +7,6 @@ go:
 os:
   - linux
 
-notifications:
-  irc:
-    channels:
-      - "chat.freenode.net#restic"
-    on_success: change
-    on_failure: change
-    skip_join: true
-
 install:
   - go version
   - export GOBIN="$GOPATH/bin"
