@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"bazil.org/fuse"
@@ -12,9 +13,15 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
+var (
+	version    = "compiled manually"
+	compiledAt = "unknown"
+)
+
 // Options are global settings.
 type Options struct {
-	Seed int `long:"seed"                      description:"initial random seed"`
+	Seed    int  `long:"seed"                  description:"initial random seed"`
+	Version bool `long:"version" short:"v"     description:"print version number"`
 
 	mountpoint string
 }
@@ -95,6 +102,11 @@ func main() {
 
 	if err != nil {
 		os.Exit(1)
+	}
+
+	if opts.Version {
+		fmt.Printf("version %v, compiled at %v using %v\n", version, compiledAt, runtime.Version())
+		return
 	}
 
 	if len(args) == 0 {
