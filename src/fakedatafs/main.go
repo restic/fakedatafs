@@ -22,7 +22,8 @@ var (
 // Options are global settings.
 type Options struct {
 	Seed    int  `long:"seed"                  description:"initial random seed"`
-	Version bool `long:"version" short:"v"     description:"print version number"`
+	Version bool `long:"version" short:"V"     description:"print version number"`
+	Verbose bool `long:"verbose" short:"v"     description:"be verbose"`
 
 	mountpoint string
 }
@@ -51,6 +52,18 @@ func cleanupHandler(c <-chan os.Signal) {
 	}
 }
 
+// V prints debug messages if verbose mode is requested.
+func V(format string, data ...interface{}) {
+	if opts.Verbose {
+		fmt.Printf(format, data...)
+	}
+}
+
+// M prints a message to stdout.
+func M(format string, data ...interface{}) {
+	fmt.Printf(format, data...)
+}
+
 func mount(opts Options) error {
 	conn, err := fuse.Mount(
 		opts.mountpoint,
@@ -60,6 +73,7 @@ func mount(opts Options) error {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	root := fs.Tree{}
 
@@ -74,24 +88,29 @@ func mount(opts Options) error {
 
 	// cmd.ready <- struct{}{}
 
-	err = fs.Serve(conn, &root)
-	if err != nil {
-		return err
+	M("filesystem mounted at %v\n", opts.mountpoint)
+
+	serveErrCh := make(chan error, 2)
+	go func() {
+		V("serving\n")
+		err := fs.Serve(conn, &root)
+		if err != nil {
+			serveErrCh <- err
+		}
+		<-conn.Ready
+		serveErrCh <- conn.MountError
+	}()
+
+	for {
+		select {
+		case err := <-serveErrCh:
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return err
+		case <-exitRequested:
+			fmt.Printf("umounting...\n")
+			return fuse.Unmount(opts.mountpoint)
+		}
 	}
-
-	<-conn.Ready
-	err = conn.MountError
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mount failed: %v\n", err)
-		return fuse.Unmount(opts.mountpoint)
-	}
-
-	fmt.Printf("successfully mounted fakedatafs at %v\n", opts.mountpoint)
-
-	<-exitRequested
-
-	fmt.Printf("umounting...\n")
-	return fuse.Unmount(opts.mountpoint)
 }
 
 func main() {
