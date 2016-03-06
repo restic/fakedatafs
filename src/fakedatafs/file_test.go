@@ -212,3 +212,55 @@ func BenchmarkFileReadAll(t *testing.B) {
 		}
 	}
 }
+
+func BenchmarkFileReadAt(t *testing.B) {
+	filesize := 1 << 28
+
+	buf := make([]byte, 128*1024)
+	f := NewFile(42, filesize, 0)
+
+	t.SetBytes(int64(filesize))
+	t.ResetTimer()
+
+	for i := 0; i < t.N; i++ {
+		var pos int64
+		for {
+			n, err := f.ReadAt(buf, pos)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			pos += int64(n)
+			if n < len(buf) {
+				break
+			}
+		}
+
+		if pos != int64(filesize) {
+			t.Fatalf("pos at end is wrong: want %d, got %d", filesize, pos)
+		}
+	}
+}
+
+func BenchmarkFileReadAtSingle(t *testing.B) {
+	filesize := 1 << 28
+
+	buf := make([]byte, 128*1024)
+	f := NewFile(42, filesize, 0)
+	pos := int64(filesize/2)
+
+	t.SetBytes(int64(filesize))
+	t.ResetTimer()
+
+	for i := 0; i < t.N; i++ {
+		n, err := f.ReadAt(buf, pos)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if n != len(buf) {
+			t.Fatalf("invalid number of bytes returned, want %d, got %d", len(buf), n)
+		}
+	}
+}
