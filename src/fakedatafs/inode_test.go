@@ -1,10 +1,14 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/jacobsa/fuse/fuseops"
+)
 
 var inodePathTests = []struct {
 	path  string
-	inode uint64
+	inode fuseops.InodeID
 }{
 	{"/", 1251674434},
 	{"/foo/bar", 902704296},
