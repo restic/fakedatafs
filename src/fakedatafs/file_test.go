@@ -213,7 +213,7 @@ func BenchmarkFileReadAll(t *testing.B) {
 	}
 }
 
-func BenchmarkFileReadAt(t *testing.B) {
+func BenchmarkFileReadAtAll(t *testing.B) {
 	filesize := 1 << 28
 
 	buf := make([]byte, 128*1024)
@@ -242,7 +242,7 @@ func BenchmarkFileReadAt(t *testing.B) {
 	}
 }
 
-func BenchmarkFileReadAtSingle(t *testing.B) {
+func BenchmarkFileReadAtOnce(t *testing.B) {
 	filesize := 1 << 28
 
 	buf := make([]byte, 128*1024)

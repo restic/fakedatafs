@@ -24,6 +24,7 @@ type FakeDataFS struct {
 	FilesPerDir int
 
 	entries map[fuseops.InodeID]Entry
+	cache   *Cache
 
 	fuseutil.NotImplementedFileSystem
 }
@@ -34,6 +35,7 @@ func NewFakeDataFS(seed int64, maxSize int, filesPerDir int) (fs *FakeDataFS, er
 		Seed:        seed,
 		MaxSize:     maxSize,
 		FilesPerDir: filesPerDir,
+		cache:       newCache(),
 		entries:     make(map[fuseops.InodeID]Entry),
 	}
 	V("create filesystem with seed %v, max size %v, %v files per dir\n", seed, maxSize, filesPerDir)
