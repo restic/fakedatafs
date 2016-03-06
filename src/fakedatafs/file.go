@@ -24,7 +24,7 @@ func (s Segment) String() string {
 }
 
 type randReader struct {
-	rd  io.Reader
+	rnd *rand.Rand
 	buf []byte
 }
 
@@ -37,9 +37,22 @@ func (d dumpReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func newRandReader(rd io.Reader) io.Reader {
-	return &randReader{rd: rd, buf: make([]byte, 0, 7)}
+func newRandReader(rnd *rand.Rand) io.Reader {
+	return &randReader{rnd: rnd, buf: make([]byte, 0, 7)}
 }
+
+
+func (rd *randReader) read(p []byte) (n int, err error) {
+	for i := 0; i < len(p); i += 7 {
+		val := rd.rnd.Int63()
+		for j := 0; i+j < len(p) && j < 7; j++ {
+			p[i+j] = byte(val)
+			val >>= 8
+		}
+	}
+	return len(p), nil
+}
+
 
 func (rd *randReader) Read(p []byte) (int, error) {
 	// first, copy buffer to p
@@ -57,7 +70,7 @@ func (rd *randReader) Read(p []byte) (int, error) {
 
 	// load multiple of 7 byte
 	l := (len(p) / 7) * 7
-	n, err := io.ReadFull(rd.rd, p[:l])
+	n, err := rd.read(p[:l])
 	pos += n
 	if err != nil {
 		return pos, err
@@ -66,7 +79,7 @@ func (rd *randReader) Read(p []byte) (int, error) {
 
 	// load 7 byte to temp buffer
 	rd.buf = rd.buf[:7]
-	n, err = io.ReadFull(rd.rd, rd.buf)
+	n, err = rd.read(rd.buf)
 	if err != nil {
 		return pos, err
 	}
