@@ -70,23 +70,9 @@ func (rd *randReader) Read(p []byte) (int, error) {
 	return pos, nil
 }
 
-type dumpReader struct {
-	rd io.Reader
-}
-
-func (d dumpReader) Read(p []byte) (int, error) {
-	n, err := d.rd.Read(p)
-	max := 20
-	if n < max {
-		max = n
-	}
-	return n, err
-}
-
 // Reader returns a reader for this segment.
 func (s Segment) Reader() io.Reader {
-	rd := dumpReader{rd: rand.New(rand.NewSource(s.Seed))}
-	return newRandReader(rd)
+	return newRandReader(rand.New(rand.NewSource(s.Seed)))
 }
 
 // File represents fake data with a specific seed.
