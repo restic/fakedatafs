@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"time"
 
@@ -30,12 +31,12 @@ type FakeDataFS struct {
 }
 
 // NewFakeDataFS creates a new filesystem.
-func NewFakeDataFS(seed int64, maxSize int, filesPerDir int) (fs *FakeDataFS, err error) {
+func NewFakeDataFS(ctx context.Context, seed int64, maxSize int, filesPerDir int) (fs *FakeDataFS, err error) {
 	fs = &FakeDataFS{
 		Seed:        seed,
 		MaxSize:     maxSize,
 		FilesPerDir: filesPerDir,
-		cache:       newCache(),
+		cache:       newCache(ctx),
 		entries:     make(map[fuseops.InodeID]Entry),
 	}
 	V("create filesystem with seed %v, max size %v, %v files per dir\n", seed, maxSize, filesPerDir)
@@ -159,7 +160,18 @@ func (f *FakeDataFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error
 		return fuse.EIO
 	}
 
-	_, err := entry.File.ReadAt(op.Dst, op.Offset)
+	rd, err := f.cache.Get(op.Inode, op.Offset)
+	if err != nil {
+		rd = ContinuousFileReader(entry.File, op.Offset)
+	}
+
+
+	n, err := io.ReadFull(rd, op.Dst)
+	if err == io.ErrUnexpectedEOF {
+		err = nil
+	} else {
+		f.cache.Put(op.Inode, op.Offset+int64(n), rd)
+	}
 	op.BytesRead = len(op.Dst)
 	return err
 }

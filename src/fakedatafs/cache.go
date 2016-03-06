@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/jacobsa/fuse/fuseops"
 )
 
@@ -15,8 +17,8 @@ type cacheKey struct {
 }
 
 type cacheEntry struct {
-	file io.Reader
-	t    time.Time
+	rd io.Reader
+	t  time.Time
 }
 
 // Cache holds a list of recently read files.
@@ -25,10 +27,14 @@ type Cache struct {
 	m       sync.Mutex
 }
 
-func newCache() *Cache {
-	return &Cache{
+func newCache(ctx context.Context) *Cache {
+	c := &Cache{
 		entries: make(map[cacheKey]cacheEntry),
 	}
+
+	go c.cleanup(ctx)
+
+	return c
 }
 
 // Get retrieves and removes an entry from the cache.
@@ -44,7 +50,7 @@ func (c *Cache) Get(inode fuseops.InodeID, off int64) (io.Reader, error) {
 
 	delete(c.entries, key)
 
-	return entry.file, nil
+	return entry.rd, nil
 }
 
 // Put stores an entry in the cache.
@@ -59,23 +65,36 @@ func (c *Cache) Put(inode fuseops.InodeID, off int64, rd io.Reader) {
 	}
 
 	entry := cacheEntry{
-		file: rd,
-		t:    time.Now(),
+		rd: rd,
+		t:  time.Now(),
 	}
 
 	c.entries[key] = entry
 }
 
-const cacheTimeout = 20 * time.Second
+const (
+	cacheTimeout = 20 * time.Second
+	cacheTicker  = 5 * time.Second
+)
 
-// Cleanup removes old entries from the cache.
-func (c *Cache) Cleanup() {
-	c.m.Lock()
-	defer c.m.Unlock()
-
-	for key, entry := range c.entries {
-		if time.Since(entry.t) > cacheTimeout {
-			delete(c.entries, key)
+// cleanup removes old entries from the cache.
+func (c *Cache) cleanup(ctx context.Context) {
+	ticker := time.NewTicker(cacheTicker)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			n := 0
+			c.m.Lock()
+			for key, entry := range c.entries {
+				if time.Since(entry.t) > cacheTimeout {
+					delete(c.entries, key)
+					n++
+				}
+			}
+			c.m.Unlock()
+		case <-ctx.Done():
+			return
 		}
 	}
 }
