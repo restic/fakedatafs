@@ -246,7 +246,17 @@ type FileHandle struct {
 	f *File
 }
 
-// ReadAll returns the content of the file.
-func (f FileHandle) ReadAll(ctx context.Context) ([]byte, error) {
-	return f.f.ReadAll()
+// Read returns the content of the file.
+func (f FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, res *fuse.ReadResponse) error {
+	// fmt.Printf("Read %v byte at %v, res.Data len %v, cap %v\n", req.Size, req.Offset, len(res.Data), cap(res.Data))
+	res.Data = res.Data[:req.Size]
+	n, err := f.f.ReadAt(res.Data, req.Offset)
+	// fmt.Printf("  -> %v %v\n", n, err)
+	res.Data = res.Data[:n]
+	return err
 }
+
+// ReadAll returns the content of the file.
+// func (f FileHandle) ReadAll(ctx context.Context) ([]byte, error) {
+// 	return f.f.ReadAll()
+// }
