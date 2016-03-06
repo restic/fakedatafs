@@ -34,7 +34,6 @@ type dumpReader struct {
 
 func (d dumpReader) Read(p []byte) (int, error) {
 	n, err := d.rd.Read(p)
-	fmt.Printf("dump: Read(%d) = %v, %v\n", len(p), n, err)
 	return n, err
 }
 
@@ -85,7 +84,7 @@ func (rd *randReader) Read(p []byte) (int, error) {
 
 // Reader returns a reader for this segment.
 func (s Segment) Reader() io.Reader {
-	return newRandReader(rand.New(rand.NewSource(s.Seed)))
+	return io.LimitReader(newRandReader(rand.New(rand.NewSource(s.Seed))), int64(s.Size))
 }
 
 // File represents fake data with a specific seed.
@@ -199,13 +198,6 @@ func (f File) ReadAt(p []byte, off int64) (n int, err error) {
 	return pos, nil
 }
 
-// Read reads data into a buffer
-func (f *File) Read(p []byte) (n int, err error) {
-	n, err = f.ReadAt(p, f.pos)
-	f.pos += int64(n)
-	return n, err
-}
-
 // Seek to the given position.
 func (f *File) Seek(offset int64, whence int) (int64, error) {
 	pos := f.pos
@@ -222,6 +214,79 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	f.pos = pos
+
+	return pos, nil
+}
+
+type contFileReader struct {
+	Segments []Segment
+	seg      int
+	size     int
+	skip     int64
+	cur      io.Reader
+}
+
+// ContinuousFileReader returns a reader that yields the content of a file
+// starting at start.
+func ContinuousFileReader(f *File, start int64) io.Reader {
+	return &contFileReader{Segments: f.Segments, skip: start, size: f.Size}
+}
+
+func (rd *contFileReader) Read(p []byte) (int, error) {
+
+	if rd.skip > int64(rd.size) {
+		return 0, errors.New("offset beyond end of file")
+	}
+
+	// skip whole segments
+	if rd.skip > 0 {
+		for i, s := range rd.Segments {
+
+			if rd.skip < int64(s.Size) {
+				rd.seg = i
+				break
+			}
+
+			rd.skip -= int64(s.Size)
+		}
+	}
+
+	// skip bytes of current reader
+	if rd.cur == nil {
+		seg := rd.Segments[rd.seg]
+		rd.cur = seg.Reader()
+
+		if rd.skip > 0 {
+			_, err := io.CopyN(ioutil.Discard, rd.cur, rd.skip)
+			if err != nil {
+				return 0, err
+			}
+
+			rd.skip = 0
+		}
+	}
+
+	// read data
+	pos := 0
+	for pos < len(p) {
+		n, err := io.ReadFull(rd.cur, p[pos:])
+		pos += n
+
+		if err == io.ErrUnexpectedEOF {
+			rd.seg++
+			if rd.seg >= len(rd.Segments) {
+				rd.cur = nil
+				return pos, io.EOF
+			}
+
+			rd.cur = rd.Segments[rd.seg].Reader()
+			continue
+		}
+
+		if err != nil {
+			return n, err
+		}
+	}
 
 	return pos, nil
 }

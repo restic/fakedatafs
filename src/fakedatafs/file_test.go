@@ -43,22 +43,6 @@ func TestFile(t *testing.T) {
 			continue
 		}
 
-		n, err = f.Read(buf2)
-		if err != nil {
-			t.Errorf("test %d: error %v", i, err)
-			continue
-		}
-
-		if n != filesize {
-			t.Errorf("test %d: invalid number of bytes returned, want %d, got %d", i, filesize, n)
-			continue
-		}
-
-		if !bytes.Equal(buf, buf2) {
-			t.Errorf("test %d: wrong bytes returned", i)
-			continue
-		}
-
 		if filesize == 0 {
 			n, err = f.ReadAt(buf2, 23)
 			if n != 0 {
@@ -186,29 +170,43 @@ func TestRandReader(t *testing.T) {
 	}
 }
 
-func BenchmarkFileReadAll(t *testing.B) {
-	filesize := 1 << 28
+func TestContinuousFileReader(t *testing.T) {
+	rnd := rand.New(rand.NewSource(23))
 
-	buf := make([]byte, 512*1024)
-	f := NewFile(42, filesize, 0)
+	for i, filesize := range testFileSizes {
+		f := NewFile(23, filesize, 23)
 
-	t.SetBytes(int64(filesize))
-	t.ResetTimer()
-
-	for i := 0; i < t.N; i++ {
-		_, err := f.Seek(0, 0)
+		buf, err := f.ReadAll()
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			continue
 		}
 
-		pos := 0
-		for pos < filesize {
-			n, err := io.ReadFull(f, buf)
+		if filesize == 0 {
+			continue
+		}
+
+		for j := 0; j < 10; j++ {
+			o := rnd.Intn(filesize)
+			l := rnd.Intn(filesize - o)
+
+			buf2 := make([]byte, l)
+			crd := ContinuousFileReader(f, int64(o))
+			n, err := io.ReadFull(crd, buf2)
+
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				continue
 			}
 
-			pos += n
+			if n != l {
+				t.Errorf("test %d/%d: invalid number of bytes: want %d, got %d", i, j, l, n)
+				continue
+			}
+
+			if !bytes.Equal(buf2, buf[o:o+l]) {
+				t.Errorf("test %d/%d: wrong bytes returned at offset %v, len %v", i, j, o, l)
+			}
 		}
 	}
 }
@@ -247,7 +245,7 @@ func BenchmarkFileReadAtOnce(t *testing.B) {
 
 	buf := make([]byte, 128*1024)
 	f := NewFile(42, filesize, 0)
-	pos := int64(filesize/2)
+	pos := int64(filesize / 2)
 
 	t.SetBytes(int64(filesize))
 	t.ResetTimer()
