@@ -81,6 +81,8 @@ type File struct {
 	Size     int
 	Inode    uint64
 	Segments []Segment
+
+	pos int64
 }
 
 func (f File) String() string {
@@ -180,6 +182,33 @@ func (f File) ReadAt(p []byte, off int64) (n int, err error) {
 			break
 		}
 	}
+
+	return pos, nil
+}
+
+// Read reads data into a buffer
+func (f *File) Read(p []byte) (n int, err error) {
+	n, err = f.ReadAt(p, f.pos)
+	f.pos += int64(n)
+	return n, err
+}
+
+// Seek to the given position.
+func (f *File) Seek(offset int64, whence int) (int64, error) {
+	pos := f.pos
+	switch whence {
+	case 0:
+		pos = offset
+	case 1:
+		pos += offset
+	case 2:
+		pos = int64(f.Size) - offset
+	}
+	if pos < 0 {
+		return 0, errors.New("invalid negative position in file")
+	}
+
+	f.pos = pos
 
 	return pos, nil
 }

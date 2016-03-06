@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"math/rand"
 	"testing"
 )
@@ -27,6 +28,22 @@ func TestFile(t *testing.T) {
 		buf2 := make([]byte, filesize)
 		n, err := f.ReadAt(buf2, 0)
 
+		if err != nil {
+			t.Errorf("test %d: error %v", i, err)
+			continue
+		}
+
+		if n != filesize {
+			t.Errorf("test %d: invalid number of bytes returned, want %d, got %d", i, filesize, n)
+			continue
+		}
+
+		if !bytes.Equal(buf, buf2) {
+			t.Errorf("test %d: wrong bytes returned", i)
+			continue
+		}
+
+		n, err = f.Read(buf2)
 		if err != nil {
 			t.Errorf("test %d: error %v", i, err)
 			continue
@@ -165,6 +182,33 @@ func TestRandReader(t *testing.T) {
 			if !bytes.Equal(buf1[i*l:(i+1)*l], buf2) {
 				t.Errorf("bytes not equal: want %02x, got %02x", buf1[i*l:(i+1)*l], buf2)
 			}
+		}
+	}
+}
+
+func BenchmarkFileReadAll(t *testing.B) {
+	filesize := 1 << 28
+
+	buf := make([]byte, 512*1024)
+	f := NewFile(42, filesize, 0)
+
+	t.SetBytes(int64(filesize))
+	t.ResetTimer()
+
+	for i := 0; i < t.N; i++ {
+		_, err := f.Seek(0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pos := 0
+		for pos < filesize {
+			n, err := io.ReadFull(f, buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			pos += n
 		}
 	}
 }
