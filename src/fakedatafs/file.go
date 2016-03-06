@@ -37,14 +37,18 @@ func newRandReader(rd io.Reader) io.Reader {
 func (rd *randReader) Read(p []byte) (int, error) {
 	// first, copy buffer to p
 	pos := copy(p, rd.buf)
+	copy(rd.buf, rd.buf[pos:])
+
+	// shorten buf and p accordingly
+	rd.buf = rd.buf[:len(rd.buf)-pos]
+	p = p[pos:]
 
 	// if this is enough to fill p, return
-	if pos == len(p) {
+	if len(p) == 0 {
 		return pos, nil
 	}
 
-	// else p is larger than buf, set length to zero
-	rd.buf = rd.buf[:0]
+	// else p is larger than buf
 
 	// load multiple of 7 byte to temp buffer
 	bufsize := ((len(p) / 7) + 1) * 7
@@ -55,7 +59,7 @@ func (rd *randReader) Read(p []byte) (int, error) {
 	}
 
 	// copy the buffer to p
-	n = copy(p[pos:], buf)
+	n = copy(p, buf)
 	pos += n
 
 	// save the remaining bytes in rd.buf
@@ -66,9 +70,23 @@ func (rd *randReader) Read(p []byte) (int, error) {
 	return pos, nil
 }
 
+type dumpReader struct {
+	rd io.Reader
+}
+
+func (d dumpReader) Read(p []byte) (int, error) {
+	n, err := d.rd.Read(p)
+	max := 20
+	if n < max {
+		max = n
+	}
+	return n, err
+}
+
 // Reader returns a reader for this segment.
 func (s Segment) Reader() io.Reader {
-	return newRandReader(rand.New(rand.NewSource(s.Seed)))
+	rd := dumpReader{rd: rand.New(rand.NewSource(s.Seed))}
+	return newRandReader(rd)
 }
 
 // File represents fake data with a specific seed.
@@ -90,8 +108,6 @@ func NewFile(seed int64, size int, inode uint64) *File {
 		Inode: inode,
 	}
 
-	fmt.Printf("\nnew file, seed 0x%x, size %v\n", seed, size)
-
 	src := rand.New(rand.NewSource(seed))
 	var segmentIndex int64
 	for f.Size < size {
@@ -109,8 +125,6 @@ func NewFile(seed int64, size int, inode uint64) *File {
 			Size: nextSize,
 		}
 		f.Segments = append(f.Segments, segment)
-
-		fmt.Printf("  generate segment %v, %v\n", segmentIndex, segment)
 
 		f.Size += nextSize
 		segmentIndex++
@@ -140,7 +154,6 @@ func (f File) ReadAll() ([]byte, error) {
 
 // ReadAt reads the content at the offset.
 func (f File) ReadAt(p []byte, off int64) (n int, err error) {
-	fmt.Printf("ReadAt(len %v, off %v)\n", len(p), off)
 	if off < 0 {
 		return 0, errors.New("not implemented")
 	}
@@ -150,14 +163,11 @@ func (f File) ReadAt(p []byte, off int64) (n int, err error) {
 	}
 
 	pos := 0
-	for i, seg := range f.Segments {
+	for _, seg := range f.Segments {
 		if off > int64(seg.Size) {
-			fmt.Printf("  skip segment %v, off %v, size %v\n", i, off, seg.Size)
 			off -= int64(seg.Size)
 			continue
 		}
-
-		fmt.Printf("   found segment %v, off %v, size %v\n", i, off, seg.Size)
 
 		maxRead := pos + seg.Size - int(off)
 		if maxRead > len(p) {
@@ -166,7 +176,6 @@ func (f File) ReadAt(p []byte, off int64) (n int, err error) {
 
 		rd := seg.Reader()
 		if off > 0 {
-			fmt.Printf("    discard %d bytes\n", off)
 			_, err = io.CopyN(ioutil.Discard, rd, off)
 			if err != nil {
 				return 0, err
@@ -175,9 +184,7 @@ func (f File) ReadAt(p []byte, off int64) (n int, err error) {
 			off = 0
 		}
 
-		fmt.Printf("     read to p[%d:%d], len(p) %v\n", pos, maxRead, len(p))
 		n, err := io.ReadFull(rd, p[pos:maxRead])
-		fmt.Printf("      -> n %v, err %v\n", n, err)
 		pos += n
 		if err != nil {
 			return pos, err

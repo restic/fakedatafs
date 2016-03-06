@@ -2,13 +2,11 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"testing"
 )
 
-// var testFileSizes = []int{0, 100, 200, 500, 1024, 7666, 1 << 20, 1 << 24}
-var testFileSizes = []int{1 << 20}
+var testFileSizes = []int{0, 100, 200, 500, 1024, 7666, 1 << 20, 1 << 24}
 
 func TestFile(t *testing.T) {
 	rnd := rand.New(rand.NewSource(23))
@@ -41,7 +39,6 @@ func TestFile(t *testing.T) {
 
 		if !bytes.Equal(buf, buf2) {
 			t.Errorf("test %d: wrong bytes returned", i)
-			fmt.Printf("test %d: wrong bytes returned\n", i)
 			continue
 		}
 
@@ -59,16 +56,11 @@ func TestFile(t *testing.T) {
 		}
 
 		for j := 0; j < 10; j++ {
-			fmt.Printf("\n=========================================\n")
-
 			o := rnd.Intn(filesize)
 			l := rnd.Intn(filesize - o)
 
-			fmt.Printf("  filesize %v, len %v, off %v\n", filesize, l, o)
-
 			readatBuf := make([]byte, l)
 			n, err = f.ReadAt(readatBuf, int64(o))
-			fmt.Printf("n %v, l %v, o %v\n", n, l, o)
 			if err != nil {
 				t.Errorf("test %d/%d: reading len %v bytes at offset %v failed: %v", i, j, l, o, err)
 				continue
@@ -76,18 +68,18 @@ func TestFile(t *testing.T) {
 
 			if n != l {
 				t.Errorf("test %d/%d: want %d bytes, got %d", i, j, l, n)
-				fmt.Printf("test %d/%d: want %d bytes, got %d\n", i, j, l, n)
 				continue
 			}
 
 			if !bytes.Equal(readatBuf, buf[o:o+l]) {
-				fmt.Printf("------------------ test %d/%d: wrong bytes returned at offset %v, len %v\n", i, j, o, l)
-				// fmt.Printf("  want: %02x\n", buf[o:o+l])
-				// fmt.Printf("   got: %02x\n", readatBuf)
 				t.Errorf("test %d/%d: wrong bytes returned at offset %v, len %v", i, j, o, l)
 			}
 		}
 	}
+}
+
+type Diff struct {
+	offset, length int
 }
 
 func TestSingleFile(t *testing.T) {
@@ -120,30 +112,23 @@ func TestSingleFile(t *testing.T) {
 	}
 
 	for j := 0; j < 10; j++ {
-		fmt.Printf("\n=========================================\n")
-
 		o := rnd.Intn(filesize)
 		l := rnd.Intn(filesize - o)
 
-		fmt.Printf("  filesize %v, len %v, off %v\n", filesize, l, o)
-
 		readatBuf := make([]byte, l)
 		n, err = f.ReadAt(readatBuf, int64(o))
-		fmt.Printf("n %v, l %v, o %v\n", n, l, o)
 		if err != nil {
-			t.Fatalf("reading len %v bytes at offset %v failed: %v", l, o, err)
+			t.Errorf("reading len %v bytes at offset %v failed: %v", l, o, err)
 			continue
 		}
 
 		if n != l {
-			t.Fatalf("want %d bytes, got %d", l, n)
+			t.Errorf("want %d bytes, got %d", l, n)
 			continue
 		}
 
 		if !bytes.Equal(readatBuf, buf[o:o+l]) {
-			// fmt.Printf("  want: %02x\n", buf[o:o+l])
-			// fmt.Printf("   got: %02x\n", readatBuf)
-			t.Fatalf("wrong bytes returned at offset %v, len %v", o, l)
+			t.Errorf("wrong bytes returned at offset %v, len %v", o, l)
 		}
 	}
 }
