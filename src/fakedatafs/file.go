@@ -7,9 +7,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
-	"golang.org/x/net/context"
+	"github.com/jacobsa/fuse/fuseops"
 )
 
 const minSegmentSize = 512 * 1024      // 512KiB
@@ -94,7 +92,7 @@ func (s Segment) Reader() io.Reader {
 type File struct {
 	Seed     int64
 	Size     int
-	Inode    uint64
+	Inode    fuseops.InodeID
 	Segments []Segment
 
 	pos int64
@@ -105,7 +103,7 @@ func (f File) String() string {
 }
 
 // NewFile initializes a new file with the given seed.
-func NewFile(seed int64, size int, inode uint64) *File {
+func NewFile(seed int64, size int, inode fuseops.InodeID) *File {
 	f := &File{
 		Seed:  seed,
 		Inode: inode,
@@ -227,36 +225,3 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 
 	return pos, nil
 }
-
-// Attr returns the attributes for this file.
-func (f File) Attr(ctx context.Context, a *fuse.Attr) error {
-	a.Inode = f.Inode
-	a.Mode = 0644
-	a.Size = uint64(f.Size)
-	return nil
-}
-
-// Open the file.
-func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
-	return FileHandle{f}, nil
-}
-
-// FileHandle is return by Open.
-type FileHandle struct {
-	f *File
-}
-
-// Read returns the content of the file.
-func (f FileHandle) Read(ctx context.Context, req *fuse.ReadRequest, res *fuse.ReadResponse) error {
-	// fmt.Printf("Read %v byte at %v, res.Data len %v, cap %v\n", req.Size, req.Offset, len(res.Data), cap(res.Data))
-	res.Data = res.Data[:req.Size]
-	n, err := f.f.ReadAt(res.Data, req.Offset)
-	// fmt.Printf("  -> %v %v\n", n, err)
-	res.Data = res.Data[:n]
-	return err
-}
-
-// ReadAll returns the content of the file.
-// func (f FileHandle) ReadAll(ctx context.Context) ([]byte, error) {
-// 	return f.f.ReadAll()
-// }

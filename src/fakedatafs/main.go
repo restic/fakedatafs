@@ -2,15 +2,17 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"runtime"
 	"sync"
 	"syscall"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
+	"golang.org/x/net/context"
 
+	"github.com/jacobsa/fuse"
+	"github.com/jacobsa/fuse/fuseutil"
 	"github.com/jessevdk/go-flags"
 )
 
@@ -23,6 +25,7 @@ var (
 type Options struct {
 	Version bool `long:"version" short:"V"     description:"print version number"`
 	Verbose bool `long:"verbose" short:"v"     description:"be verbose"`
+	Debug   bool `long:"debug"                 description:"output debug messages"`
 
 	Seed     int64 `long:"seed"                    default:"23" description:"initial random seed"`
 	NumFiles int   `long:"files-per-dir" short:"n" default:"100" description:"number of files per directory"`
@@ -34,25 +37,27 @@ type Options struct {
 var opts = Options{}
 var parser = flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
 
-var exitRequested = make(chan struct{})
+var ctx context.Context
 
 func init() {
 	parser.Usage = "mountpoint"
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(context.Background())
+
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGINT)
 
-	go cleanupHandler(c)
-}
+	go func() {
+		once := &sync.Once{}
 
-func cleanupHandler(c <-chan os.Signal) {
-	once := &sync.Once{}
-
-	for range c {
-		once.Do(func() {
-			fmt.Println("Interrupt received, cleaning up")
-			close(exitRequested)
-		})
-	}
+		for range c {
+			once.Do(func() {
+				fmt.Println("Interrupt received, cleaning up")
+				cancel()
+			})
+		}
+	}()
 }
 
 // V prints debug messages if verbose mode is requested.
@@ -67,46 +72,33 @@ func M(format string, data ...interface{}) {
 	fmt.Printf(format, data...)
 }
 
-func mount(opts Options) error {
-	fakefs := FakeDataFS{
-		Seed:        opts.Seed,
-		FilesPerDir: opts.NumFiles,
-		MaxSize:     opts.MaxSize * 1024,
+func mount(opts Options) (*fuse.MountedFileSystem, error) {
+	fakefs, err := NewFakeDataFS(opts.Seed, opts.MaxSize * 1024, opts.NumFiles)
+	if err != nil {
+		return nil, err
 	}
 
-	conn, err := fuse.Mount(
+	cfg := &fuse.MountConfig{
+		FSName:      "fakedatafs",
+		ReadOnly:    true,
+		ErrorLogger: log.New(os.Stderr, "ERROR: ", log.LstdFlags),
+	}
+
+	if opts.Debug {
+		cfg.DebugLogger = log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
+	}
+
+	fs, err := fuse.Mount(
 		opts.mountpoint,
-		fuse.ReadOnly(),
-		fuse.FSName("fakedatafs"),
+		fuseutil.NewFileSystemServer(fakefs),
+		cfg,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer conn.Close()
 
 	M("filesystem mounted at %v\n", opts.mountpoint)
-
-	serveErrCh := make(chan error, 2)
-	go func() {
-		V("serving\n")
-		err := fs.Serve(conn, fakefs)
-		if err != nil {
-			serveErrCh <- err
-		}
-		<-conn.Ready
-		serveErrCh <- conn.MountError
-	}()
-
-	for {
-		select {
-		case err := <-serveErrCh:
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			return err
-		case <-exitRequested:
-			fmt.Printf("umounting...\n")
-			return fuse.Unmount(opts.mountpoint)
-		}
-	}
+	return fs, nil
 }
 
 func main() {
@@ -135,9 +127,17 @@ func main() {
 	}
 
 	opts.mountpoint = args[0]
-	err = mount(opts)
+	fs, err := mount(opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
+	}
+
+	fs.Join(ctx)
+
+	err = fuse.Unmount(fs.Dir())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(3)
 	}
 }
