@@ -30,6 +30,16 @@ type randReader struct {
 	buf []byte
 }
 
+type dumpReader struct {
+	rd io.Reader
+}
+
+func (d dumpReader) Read(p []byte) (int, error) {
+	n, err := d.rd.Read(p)
+	fmt.Printf("dump: Read(%d) = %v, %v\n", len(p), n, err)
+	return n, err
+}
+
 func newRandReader(rd io.Reader) io.Reader {
 	return &randReader{rd: rd, buf: make([]byte, 0, 7)}
 }
@@ -48,23 +58,28 @@ func (rd *randReader) Read(p []byte) (int, error) {
 		return pos, nil
 	}
 
-	// else p is larger than buf
+	// load multiple of 7 byte
+	l := (len(p) / 7) * 7
+	n, err := io.ReadFull(rd.rd, p[:l])
+	pos += n
+	if err != nil {
+		return pos, err
+	}
+	p = p[n:]
 
-	// load multiple of 7 byte to temp buffer
-	bufsize := ((len(p) / 7) + 1) * 7
-	buf := make([]byte, bufsize)
-	n, err := io.ReadFull(rd.rd, buf)
+	// load 7 byte to temp buffer
+	rd.buf = rd.buf[:7]
+	n, err = io.ReadFull(rd.rd, rd.buf)
 	if err != nil {
 		return pos, err
 	}
 
-	// copy the buffer to p
-	n = copy(p, buf)
+	// copy the remaining bytes from the buffer to p
+	n = copy(p, rd.buf)
 	pos += n
 
 	// save the remaining bytes in rd.buf
-	rd.buf = rd.buf[:7]
-	n = copy(rd.buf, buf[len(p):])
+	n = copy(rd.buf, rd.buf[n:])
 	rd.buf = rd.buf[:n]
 
 	return pos, nil
