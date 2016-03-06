@@ -41,7 +41,6 @@ func newRandReader(rnd *rand.Rand) io.Reader {
 	return &randReader{rnd: rnd, buf: make([]byte, 0, 7)}
 }
 
-
 func (rd *randReader) read(p []byte) (n int, err error) {
 	for i := 0; i < len(p); i += 7 {
 		val := rd.rnd.Int63()
@@ -52,7 +51,6 @@ func (rd *randReader) read(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
-
 
 func (rd *randReader) Read(p []byte) (int, error) {
 	// first, copy buffer to p
