@@ -73,7 +73,7 @@ func M(format string, data ...interface{}) {
 }
 
 func mount(opts Options) (*fuse.MountedFileSystem, error) {
-	fakefs, err := NewFakeDataFS(ctx, opts.Seed, opts.MaxSize * 1024, opts.NumFiles)
+	fakefs, err := NewFakeDataFS(ctx, opts.Seed, opts.MaxSize*1024, opts.NumFiles)
 	if err != nil {
 		return nil, err
 	}

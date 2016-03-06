@@ -165,7 +165,6 @@ func (f *FakeDataFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error
 		rd = ContinuousFileReader(entry.File, op.Offset)
 	}
 
-
 	n, err := io.ReadFull(rd, op.Dst)
 	if err == io.ErrUnexpectedEOF {
 		err = nil

@@ -49,7 +49,7 @@ func NewDir(fs *FakeDataFS, seed int64, dir string, numEntries, maxSize int) *Di
 		inode := inodePath(path.Join(d.path, name))
 
 		d.entries[i] = fuseutil.Dirent{
-			Offset: fuseops.DirOffset(i+1),
+			Offset: fuseops.DirOffset(i + 1),
 			Name:   name,
 			Type:   fuseutil.DT_File,
 			Inode:  inode,
@@ -64,8 +64,8 @@ func NewDir(fs *FakeDataFS, seed int64, dir string, numEntries, maxSize int) *Di
 			File: f,
 			Attr: fuseops.InodeAttributes{
 				Nlink: 1,
-				Mode: 0644,
-				Size: uint64(size),
+				Mode:  0644,
+				Size:  uint64(size),
 			},
 		}
 	}
