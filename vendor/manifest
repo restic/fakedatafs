@@ -2,9 +2,9 @@
 	"version": 0,
 	"dependencies": [
 		{
-			"importpath": "bazil.org/fuse",
-			"repository": "https://github.com/bazil/fuse",
-			"revision": "4a4e0029e1364436782cd3cd5073a1e9bb10176f",
+			"importpath": "github.com/jacobsa/fuse",
+			"repository": "https://github.com/jacobsa/fuse",
+			"revision": "652a72aae2c59321ae6ed05efac92c97210775d7",
 			"branch": "master"
 		},
 		{
