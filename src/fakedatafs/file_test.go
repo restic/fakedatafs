@@ -90,6 +90,64 @@ func TestFile(t *testing.T) {
 	}
 }
 
+func TestSingleFile(t *testing.T) {
+	rnd := rand.New(rand.NewSource(23))
+
+	filesize := 1048576
+	f := NewFile(23, filesize, 0)
+	buf, err := f.ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(buf) != filesize {
+		t.Fatalf("invalid number of bytes returned, want %d, got %d", filesize, len(buf))
+	}
+
+	buf2 := make([]byte, filesize)
+	n, err := f.ReadAt(buf2, 0)
+
+	if err != nil {
+		t.Fatalf("error %v", err)
+	}
+
+	if n != filesize {
+		t.Errorf("invalid number of bytes returned, want %d, got %d", filesize, n)
+	}
+
+	if !bytes.Equal(buf, buf2) {
+		t.Fatalf("wrong bytes returned")
+	}
+
+	for j := 0; j < 10; j++ {
+		fmt.Printf("\n=========================================\n")
+
+		o := rnd.Intn(filesize)
+		l := rnd.Intn(filesize - o)
+
+		fmt.Printf("  filesize %v, len %v, off %v\n", filesize, l, o)
+
+		readatBuf := make([]byte, l)
+		n, err = f.ReadAt(readatBuf, int64(o))
+		fmt.Printf("n %v, l %v, o %v\n", n, l, o)
+		if err != nil {
+			t.Fatalf("reading len %v bytes at offset %v failed: %v", l, o, err)
+			continue
+		}
+
+		if n != l {
+			t.Fatalf("want %d bytes, got %d", l, n)
+			continue
+		}
+
+		if !bytes.Equal(readatBuf, buf[o:o+l]) {
+			// fmt.Printf("  want: %02x\n", buf[o:o+l])
+			// fmt.Printf("   got: %02x\n", readatBuf)
+			t.Fatalf("wrong bytes returned at offset %v, len %v", o, l)
+		}
+	}
+}
+
 func TestRandReader(t *testing.T) {
 	rd := newRandReader(rand.New(rand.NewSource(23)))
 
