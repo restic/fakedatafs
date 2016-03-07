@@ -42,13 +42,23 @@ func newRandReader(rnd *rand.Rand) io.Reader {
 }
 
 func (rd *randReader) read(p []byte) (n int, err error) {
-	for i := 0; i < len(p); i += 7 {
-		val := rd.rnd.Int63()
-		for j := 0; i+j < len(p) && j < 7; j++ {
-			p[i+j] = byte(val)
-			val >>= 8
-		}
+	if len(p)%7 != 0 {
+		panic("invalid buffer length, not multiple of 7")
 	}
+
+	rnd := rd.rnd
+	for i := 0; i < len(p); i += 7 {
+		val := rnd.Int63()
+
+		p[i+0] = byte(val >> 0)
+		p[i+1] = byte(val >> 8)
+		p[i+2] = byte(val >> 16)
+		p[i+3] = byte(val >> 24)
+		p[i+4] = byte(val >> 32)
+		p[i+5] = byte(val >> 40)
+		p[i+6] = byte(val >> 48)
+	}
+
 	return len(p), nil
 }
 
@@ -260,6 +270,10 @@ func (rd *contFileReader) Read(p []byte) (int, error) {
 
 			rd.skip -= int64(s.Size)
 		}
+	}
+
+	if rd.seg == len(rd.Segments) {
+		return 0, io.EOF
 	}
 
 	// skip bytes of current reader

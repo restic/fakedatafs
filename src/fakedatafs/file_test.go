@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-var testFileSizes = []int{0, 100, 200, 500, 1024, 7666, 1 << 20, 1 << 24}
+var testFileSizes = []int{0, 100, 200, 500, 1024, 7666, 1 << 20, 1 << 24, 1<<22 + 1234}
 
 func TestFile(t *testing.T) {
 	rnd := rand.New(rand.NewSource(23))
@@ -170,11 +170,11 @@ func TestRandReader(t *testing.T) {
 	}
 }
 
-func TestContinuousFileReader(t *testing.T) {
+func TestContinuousFileReaderOffsets(t *testing.T) {
 	rnd := rand.New(rand.NewSource(23))
 
 	for i, filesize := range testFileSizes {
-		f := NewFile(23, filesize, 23)
+		f := NewFile(42, filesize, 0)
 
 		buf, err := f.ReadAll()
 		if err != nil {
@@ -207,6 +207,133 @@ func TestContinuousFileReader(t *testing.T) {
 			if !bytes.Equal(buf2, buf[o:o+l]) {
 				t.Errorf("test %d/%d: wrong bytes returned at offset %v, len %v", i, j, o, l)
 			}
+		}
+	}
+}
+
+func TestContinuousFileReaderReadFull(t *testing.T) {
+	for _, filesize := range testFileSizes {
+		f := NewFile(42, filesize, 0)
+
+		content, err := f.ReadAll()
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		if filesize == 0 {
+			continue
+		}
+
+		crd := ContinuousFileReader(f, 0)
+		buf := make([]byte, filesize)
+		n, err := io.ReadFull(crd, buf)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if n != filesize {
+			t.Fatalf("wrong number of bytes returned, want %d, got %d", filesize, n)
+		}
+
+		if !bytes.Equal(buf, content) {
+			t.Fatal("wrong bytes returned")
+		}
+	}
+}
+
+func TestContinuousFileReaderReadOffsets(t *testing.T) {
+	for _, filesize := range testFileSizes {
+		f := NewFile(42, filesize, 0)
+
+		content, err := f.ReadAll()
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		if filesize == 0 {
+			continue
+		}
+
+		buf := make([]byte, 128*1024)
+		crd := ContinuousFileReader(f, 0)
+		pos := 0
+		for pos < filesize {
+			n, err := io.ReadFull(crd, buf)
+
+			// allow one io.ErrUnexpectedEOF at the end of the file
+			if err == io.ErrUnexpectedEOF && pos+n == filesize {
+				err = nil
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !bytes.Equal(buf[:n], content[pos:pos+n]) {
+				t.Fatalf("filesize %d: wrong bytes returned", filesize)
+			}
+
+			pos += n
+		}
+	}
+}
+
+func BenchmarkFileReadContinousThroughput(t *testing.B) {
+	filesize := 1<<28 + 1233
+
+	buf := make([]byte, 128*1024)
+	f := NewFile(42, filesize, 0)
+
+	t.SetBytes(int64(filesize))
+	t.ResetTimer()
+
+	for i := 0; i < t.N; i++ {
+		rd := ContinuousFileReader(f, 0)
+
+		l := 0
+		pos := 0
+		for pos < filesize {
+			n, err := io.ReadFull(rd, buf)
+
+			// allow one io.ErrUnexpectedEOF at the end of the file
+			if err == io.ErrUnexpectedEOF && pos+n == filesize {
+				err = nil
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			pos += n
+		}
+
+		if pos != filesize {
+			t.Fatalf("pos at end is wrong: want %d, got %d", filesize, l)
+		}
+	}
+}
+
+func BenchmarkFileReadContinousReadLatency(t *testing.B) {
+	filesize := 1<<28 + 1233
+
+	buf := make([]byte, 128*1024)
+	f := NewFile(42, filesize, 0)
+
+	t.ResetTimer()
+
+	for i := 0; i < t.N; i++ {
+		rd := ContinuousFileReader(f, int64(filesize/2))
+		n, err := io.ReadFull(rd, buf)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if n != len(buf) {
+			t.Fatalf("wrong number of bytes returned, want %d, got %d", len(buf), n)
 		}
 	}
 }
