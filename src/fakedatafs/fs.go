@@ -121,6 +121,19 @@ func (f *FakeDataFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 	return nil
 }
 
+func (f *FakeDataFS) StatFS(
+	ctx context.Context,
+	op *fuseops.StatFSOp) (err error) {
+	return
+}
+
+func (f *FakeDataFS) OpenFile(
+	ctx context.Context,
+	op *fuseops.OpenFileOp) (err error) {
+	// Allow opening any file.
+	return
+}
+
 // LookUpInode returns information on an inode.
 func (f *FakeDataFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) error {
 	entry, ok := f.entries[op.Parent]

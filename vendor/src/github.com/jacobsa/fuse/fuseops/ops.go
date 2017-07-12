@@ -59,7 +59,7 @@ type StatFSOp struct {
 	//
 	// On Linux this can be any value, and will be faithfully returned to the
 	// caller of statfs(2) (see the code walk above). On OS X it appears that
-	// only powers of 2 in the range [2^9, 2^17] are preserved, and a value of
+	// only powers of 2 in the range [2^7, 2^20] are preserved, and a value of
 	// zero is treated as 4096.
 	//
 	// This interface does not distinguish between blocks and block fragments.
@@ -85,7 +85,7 @@ type StatFSOp struct {
 	// transfer block size".
 	//
 	// On Linux this can be any value. On OS X it appears that only powers of 2
-	// in the range [2^12, 2^20] are faithfully preserved, and a value of zero is
+	// in the range [2^12, 2^25] are faithfully preserved, and a value of zero is
 	// treated as 65536.
 	IoSize uint32
 
@@ -564,6 +564,15 @@ type OpenFileOp struct {
 	// is set to true, regardless of its value, at least for files opened in the
 	// same mode. (Cf. https://github.com/osxfuse/osxfuse/issues/223)
 	KeepPageCache bool
+
+	// Whether to use direct IO for this file handle. By default, the kernel
+	// suppresses what it sees as redundant operations (including reads beyond
+	// the precomputed EOF).
+	//
+	// Enabling direct IO ensures that all client operations reach the fuse
+	// layer. This allows for filesystems whose file sizes are not known in
+	// advance, for example, because contents are generated on the fly.
+	UseDirectIO bool
 }
 
 // Read data from a file previously opened with CreateFile or OpenFile.
@@ -591,6 +600,8 @@ type ReadFileOp struct {
 	// (http://goo.gl/SGxnaN) to read a page at a time. It appears to understand
 	// where EOF is by checking the inode size (http://goo.gl/0BkqKD), returned
 	// by a previous call to LookUpInode, GetInodeAttributes, etc.
+	//
+	// If direct IO is enabled, semantics should match those of read(2).
 	BytesRead int
 }
 
@@ -696,9 +707,10 @@ type SyncFileOp struct {
 //  *  On OS X, if a user modifies a mapped file via the mapping before
 //     closing the file with close(2), the WriteFileOps for the modifications
 //     may not be received before the FlushFileOp for the close(2) (cf.
-//     http://goo.gl/kVmNcx).
+//     https://github.com/osxfuse/osxfuse/issues/202). It appears that this may
+//     be fixed in osxfuse 3 (cf. https://goo.gl/rtvbko).
 //
-//  *  However, even on OS X you can arrange for writes via a mapping to be
+//  *  However, you safely can arrange for writes via a mapping to be
 //     flushed by calling msync(2) followed by close(2). On OS X msync(2)
 //     will cause a WriteFileOps to go through and close(2) will cause a
 //     FlushFile as usual (cf. http://goo.gl/kVmNcx). On Linux, msync(2) does
@@ -754,4 +766,82 @@ type ReadSymlinkOp struct {
 
 	// Set by the file system: the target of the symlink.
 	Target string
+}
+
+////////////////////////////////////////////////////////////////////////
+// eXtended attributes
+////////////////////////////////////////////////////////////////////////
+
+// Remove an extended attribute.
+//
+// This is sent in response to removexattr(2). Return ENOATTR if the
+// extended attribute does not exist.
+type RemoveXattrOp struct {
+	// The inode that we are removing an extended attribute from.
+	Inode InodeID
+
+	// The name of the extended attribute.
+	Name string
+}
+
+// Get an extended attribute.
+//
+// This is sent in response to getxattr(2). Return ENOATTR if the
+// extended attribute does not exist.
+type GetXattrOp struct {
+	// The inode whose extended attribute we are reading.
+	Inode InodeID
+
+	// The name of the extended attribute.
+	Name string
+
+	// The destination buffer.  If the size is too small for the
+	// value, the ERANGE error should be sent.
+	Dst []byte
+
+	// Set by the file system: the number of bytes read into Dst, or
+	// the number of bytes that would have been read into Dst if Dst was
+	// big enough (return ERANGE in this case).
+	BytesRead int
+}
+
+// List all the extended attributes for a file.
+//
+// This is sent in response to listxattr(2).
+type ListXattrOp struct {
+	// The inode whose extended attributes we are listing.
+	Inode InodeID
+
+	// The destination buffer.  If the size is too small for the
+	// value, the ERANGE error should be sent.
+	//
+	// The output data should consist of a sequence of NUL-terminated strings,
+	// one for each xattr.
+	Dst []byte
+
+	// Set by the file system: the number of bytes read into Dst, or
+	// the number of bytes that would have been read into Dst if Dst was
+	// big enough (return ERANGE in this case).
+	BytesRead int
+}
+
+// Set an extended attribute.
+//
+// This is sent in response to setxattr(2). Return ENOSPC if there is
+// insufficient space remaining to store the extended attribute.
+type SetXattrOp struct {
+	// The inode whose extended attribute we are setting.
+	Inode InodeID
+
+	// The name of the extended attribute
+	Name string
+
+	// The value to for the extened attribute.
+	Value []byte
+
+	// If Flags is 0x1, and the attribute exists already, EEXIST should be returned.
+	// If Flags is 0x2, and the attribute does not exist, ENOATTR should be returned.
+	// If Flags is 0x0, the extended attribute will be created if need be, or will
+	// simply replace the value if the attribute exists.
+	Flags uint32
 }
