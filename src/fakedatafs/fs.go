@@ -121,12 +121,14 @@ func (f *FakeDataFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 	return nil
 }
 
+// StatFS apparently necessary and probably allows statfs to return
 func (f *FakeDataFS) StatFS(
 	ctx context.Context,
 	op *fuseops.StatFSOp) (err error) {
 	return
 }
 
+// OpenFile determines if a file can be opened
 func (f *FakeDataFS) OpenFile(
 	ctx context.Context,
 	op *fuseops.OpenFileOp) (err error) {
