@@ -45,6 +45,16 @@ func describeRequest(op interface{}) (s string) {
 		addComponent("inode %v", f.Interface())
 	}
 
+	// Include a parent inode number, if available.
+	if f := v.FieldByName("Parent"); f.IsValid() {
+		addComponent("parent %v", f.Interface())
+	}
+
+	// Include a name, if available.
+	if f := v.FieldByName("Name"); f.IsValid() {
+		addComponent("name %q", f.Interface())
+	}
+
 	// Handle special cases.
 	switch typed := op.(type) {
 	case *interruptOp:
@@ -52,10 +62,6 @@ func describeRequest(op interface{}) (s string) {
 
 	case *unknownOp:
 		addComponent("opcode %d", typed.OpCode)
-
-	case *fuseops.LookUpInodeOp:
-		addComponent("parent %d", typed.Parent)
-		addComponent("name %q", typed.Name)
 
 	case *fuseops.SetInodeAttributesOp:
 		if typed.Size != nil {
@@ -83,6 +89,15 @@ func describeRequest(op interface{}) (s string) {
 		addComponent("handle %d", typed.Handle)
 		addComponent("offset %d", typed.Offset)
 		addComponent("%d bytes", len(typed.Data))
+
+	case *fuseops.RemoveXattrOp:
+		addComponent("name %s", typed.Name)
+
+	case *fuseops.GetXattrOp:
+		addComponent("name %s", typed.Name)
+
+	case *fuseops.SetXattrOp:
+		addComponent("name %s", typed.Name)
 	}
 
 	// Use just the name if there is no extra info.
@@ -92,4 +107,23 @@ func describeRequest(op interface{}) (s string) {
 
 	// Otherwise, include the extra info.
 	return fmt.Sprintf("%s (%s)", opName(op), strings.Join(components, ", "))
+}
+
+func describeResponse(op interface{}) string {
+	v := reflect.ValueOf(op).Elem()
+
+	// We will set up a comma-separated list of components.
+	var components []string
+	addComponent := func(format string, v ...interface{}) {
+		components = append(components, fmt.Sprintf(format, v...))
+	}
+
+	// Include a resulting inode number, if available.
+	if f := v.FieldByName("Entry"); f.IsValid() {
+		if entry, ok := f.Interface().(fuseops.ChildInodeEntry); ok {
+			addComponent("inode %v", entry.Child)
+		}
+	}
+
+	return fmt.Sprintf("%s", strings.Join(components, ", "))
 }
