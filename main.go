@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	version    = "compiled manually"
-	compiledAt = "unknown"
+	version = "compiled manually"
 )
 
 // Options are global settings.
@@ -117,7 +116,8 @@ func main() {
 	}
 
 	if opts.Version {
-		fmt.Printf("version %v, compiled at %v using %v\n", version, compiledAt, runtime.Version())
+		fmt.Printf("version %v using %v on %v/%v\n",
+			version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 		return
 	}
 
