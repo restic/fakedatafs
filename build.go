@@ -12,16 +12,26 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 )
 
 var (
 	verbose    bool
 	keepGopath bool
 	runTests   bool
+	enableCGO  bool
 )
 
-const timeFormat = "2006-01-02 15:04:05"
+var config = struct {
+	Name      string
+	Namespace string
+	Main      string
+	Tests     []string
+}{
+	Name:      "fakedatafs",                                 // name of the program executable and directory
+	Namespace: "github.com/restic/fakedatafs",               // subdir of GOPATH, e.g. "github.com/foo/bar"
+	Main:      "github.com/restic/fakedatafs",               // package name for the main package
+	Tests:     []string{"github.com/restic/fakedatafs/..."}, // tests to run
+}
 
 // specialDir returns true if the file begins with a special character ('.' or '_').
 func specialDir(name string) bool {
@@ -40,7 +50,7 @@ func specialDir(name string) bool {
 // excludePath returns true if the file should not be copied to the new GOPATH.
 func excludePath(name string) bool {
 	ext := path.Ext(name)
-	if ext == ".go" || ext == ".s" {
+	if ext == ".go" || ext == ".s" || ext == ".h" {
 		return false
 	}
 
@@ -67,13 +77,22 @@ func excludePath(name string) bool {
 //               └── restic
 //                   └── foo.go
 func updateGopath(dst, src, prefix string) error {
+	verbosePrintf("copy contents of %v to %v\n", src, filepath.Join(dst, prefix))
 	return filepath.Walk(src, func(name string, fi os.FileInfo, err error) error {
+		if name == src {
+			return err
+		}
+
 		if specialDir(name) {
 			if fi.IsDir() {
 				return filepath.SkipDir
 			}
 
 			return nil
+		}
+
+		if err != nil {
+			return err
 		}
 
 		if fi.IsDir() {
@@ -94,6 +113,15 @@ func updateGopath(dst, src, prefix string) error {
 
 		return copyFile(fileDst, fileSrc)
 	})
+}
+
+func directoryExists(dirname string) bool {
+	stat, err := os.Stat(dirname)
+	if err != nil && os.IsNotExist(err) {
+		return false
+	}
+
+	return stat.IsDir()
 }
 
 // copyFile creates dst from src, preserving file attributes and timestamps.
@@ -152,10 +180,14 @@ func showUsage(output io.Writer) {
 	fmt.Fprintf(output, "USAGE: go run build.go OPTIONS\n")
 	fmt.Fprintf(output, "\n")
 	fmt.Fprintf(output, "OPTIONS:\n")
-	fmt.Fprintf(output, "  -v     --verbose     output more messages\n")
-	fmt.Fprintf(output, "  -t     --tags        specify additional build tags\n")
-	fmt.Fprintf(output, "  -k     --keep-gopath do not remove the GOPATH after build\n")
-	fmt.Fprintf(output, "  -T     --test        run tests\n")
+	fmt.Fprintf(output, "  -v     --verbose       output more messages\n")
+	fmt.Fprintf(output, "  -t     --tags          specify additional build tags\n")
+	fmt.Fprintf(output, "  -k     --keep-gopath   do not remove the GOPATH after build\n")
+	fmt.Fprintf(output, "  -T     --test          run tests\n")
+	fmt.Fprintf(output, "  -o     --output        set output file name\n")
+	fmt.Fprintf(output, "         --enable-cgo    use CGO to link against libc\n")
+	fmt.Fprintf(output, "         --goos value    set GOOS for cross-compilation\n")
+	fmt.Fprintf(output, "         --goarch value  set GOARCH for cross-compilation\n")
 }
 
 func verbosePrintf(message string, args ...interface{}) {
@@ -181,10 +213,17 @@ func cleanEnv() (env []string) {
 }
 
 // build runs "go build args..." with GOPATH set to gopath.
-func build(cwd, gopath string, args ...string) error {
-	args = append([]string{"build"}, args...)
-	cmd := exec.Command("go", args...)
-	cmd.Env = append(cleanEnv(), "GOPATH="+gopath)
+func build(cwd, goos, goarch, gopath string, args ...string) error {
+	a := []string{"build"}
+	a = append(a, "-asmflags", fmt.Sprintf("-trimpath=%s", gopath))
+	a = append(a, "-gcflags", fmt.Sprintf("-trimpath=%s", gopath))
+	a = append(a, args...)
+	cmd := exec.Command("go", a...)
+	cmd.Env = append(cleanEnv(), "GOPATH="+gopath, "GOARCH="+goarch, "GOOS="+goos)
+	if !enableCGO {
+		cmd.Env = append(cmd.Env, "CGO_ENABLED=0")
+	}
+
 	cmd.Dir = cwd
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -262,15 +301,8 @@ type Constants map[string]string
 func (cs Constants) LDFlags() string {
 	l := make([]string, 0, len(cs))
 
-	v := runtime.Version()
-	if strings.HasPrefix(v, "go1.5") || strings.HasPrefix(v, "go1.6") || strings.HasPrefix(v, "go1.") {
-		for k, v := range cs {
-			l = append(l, fmt.Sprintf(`-X "%s=%s"`, k, v))
-		}
-	} else {
-		for k, v := range cs {
-			l = append(l, fmt.Sprintf(`-X %q %q`, k, v))
-		}
+	for k, v := range cs {
+		l = append(l, fmt.Sprintf(`-X "%s=%s"`, k, v))
 	}
 
 	return strings.Join(l, " ")
@@ -281,6 +313,12 @@ func main() {
 
 	skipNext := false
 	params := os.Args[1:]
+
+	targetGOOS := runtime.GOOS
+	targetGOARCH := runtime.GOARCH
+
+	var outputFilename string
+
 	for i, arg := range params {
 		if skipNext {
 			skipNext = false
@@ -293,10 +331,24 @@ func main() {
 		case "-k", "--keep-gopath":
 			keepGopath = true
 		case "-t", "-tags", "--tags":
+			if i+1 >= len(params) {
+				die("-t given but no tag specified")
+			}
 			skipNext = true
 			buildTags = strings.Split(params[i+1], " ")
+		case "-o", "--output":
+			skipNext = true
+			outputFilename = params[i+1]
 		case "-T", "--test":
 			runTests = true
+		case "--enable-cgo":
+			enableCGO = true
+		case "--goos":
+			skipNext = true
+			targetGOOS = params[i+1]
+		case "--goarch":
+			skipNext = true
+			targetGOARCH = params[i+1]
 		case "-h":
 			showUsage(os.Stdout)
 			return
@@ -323,19 +375,21 @@ func main() {
 		die("Getwd(): %v\n", err)
 	}
 
-	gopath, err := ioutil.TempDir("", "fakedatafs-build-")
+	gopath, err := ioutil.TempDir("", fmt.Sprintf("%v-build-", config.Name))
 	if err != nil {
 		die("TempDir(): %v\n", err)
 	}
 
 	verbosePrintf("create GOPATH at %v\n", gopath)
-	if err = updateGopath(gopath, filepath.Join(root, "src", "fakedatafs"), "fakedatafs"); err != nil {
-		die("copying files from %v/src/fakedatafs to %v/src/fakedatafs failed: %v\n", root, gopath, err)
+	if err = updateGopath(gopath, root, config.Namespace); err != nil {
+		die("copying files from %v/src to %v/src failed: %v\n", root, gopath, err)
 	}
 
-	vendor := filepath.Join(root, "vendor", "src")
-	if err = updateGopath(gopath, vendor, ""); err != nil {
-		die("copying files from %v to %v/src failed: %v\n", vendor, gopath, err)
+	vendor := filepath.Join(root, "vendor")
+	if directoryExists(vendor) {
+		if err = updateGopath(gopath, vendor, filepath.Join(config.Namespace, "vendor")); err != nil {
+			die("copying files from %v to %v failed: %v\n", root, gopath, err)
+		}
 	}
 
 	defer func() {
@@ -349,30 +403,37 @@ func main() {
 		}
 	}()
 
-	outputFilename := "fakedatafs"
+	if outputFilename == "" {
+		outputFilename = config.Name
+		if targetGOOS == "windows" {
+			outputFilename += ".exe"
+		}
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
 		die("Getwd() returned %v\n", err)
 	}
-	output := filepath.Join(cwd, outputFilename)
+	output := outputFilename
+	if !filepath.IsAbs(output) {
+		output = filepath.Join(cwd, output)
+	}
 
 	version := getVersion()
-	compileTime := time.Now().Format(timeFormat)
-	constants := Constants{`main.compiledAt`: compileTime}
+	constants := Constants{}
 	if version != "" {
 		constants["main.version"] = version
 	}
-	ldflags := "-s " + constants.LDFlags()
+	ldflags := "-s -w " + constants.LDFlags()
 	verbosePrintf("ldflags: %s\n", ldflags)
 
 	args := []string{
 		"-tags", strings.Join(buildTags, " "),
 		"-ldflags", ldflags,
-		"-o", output, "fakedatafs",
+		"-o", output, config.Main,
 	}
 
-	err = build(filepath.Join(gopath, "src"), gopath, args...)
+	err = build(filepath.Join(gopath, "src"), targetGOOS, targetGOARCH, gopath, args...)
 	if err != nil {
 		die("build failed: %v\n", err)
 	}
@@ -380,7 +441,7 @@ func main() {
 	if runTests {
 		verbosePrintf("running tests\n")
 
-		err = test(filepath.Join(gopath, "src"), gopath, "fakedatafs/...")
+		err = test(cwd, gopath, config.Tests...)
 		if err != nil {
 			die("running tests failed: %v\n", err)
 		}
