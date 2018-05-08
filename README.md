@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/restic/fakedatafs.svg?branch=master)](https://travis-ci.org/restic/fakedatafs)
+[![Build Status](https://travis-ci.com/restic/fakedatafs.svg?branch=master)](https://travis-ci.com/restic/fakedatafs)
 [![Report Card](http://goreportcard.com/badge/restic/fakedatafs)](http://goreportcard.com/report/restic/fakedatafs)
 
 fakedatafs is a file system that generates fake data on demand in a
