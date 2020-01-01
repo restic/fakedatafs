@@ -8,10 +8,10 @@ backup software.
 Build fakedatafs
 ================
 
-Install Go/Golang (at least version 1.3), then run `go run build.go`,
+Install Go/Golang (at least version 1.11), then run `go build`,
 afterwards you'll find the binary in the current directory:
 
-    $ go run build.go
+    $ go build
 
     $ ./fakedatafs /mnt/dir
     filesystem mounted at /mnt/dir
